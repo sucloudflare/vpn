@@ -83,7 +83,9 @@ PersistentKeepalive = 25      # Mantém a conexão ativa</code></pre>
 
 <h3>3. Subir a interface</h3>
 <p>Suba a interface WireGuard no cliente:</p>
-<pre><code>sudo wg-quick up wg0</code></pre>
+<pre><code>sudo wg-quick up wg0</code>
+<code>sudo systemctl enable wg-quick@wg0
+</code></pre>
 </div>
 
 <div class="section">
