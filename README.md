@@ -411,3 +411,138 @@ curl ipinfo.io/ip</code></pre>
       <p>Se preferir, posso transformar este HTML em um arquivo para download (pronto para salvar) ou gerar o script automático mencionado acima. Quer que eu gere o script também?</p>
       <p style="margin-top:8px;">Criado para: <strong>WireGuard on Kali/Debian/Ubuntu</strong> — substitua chaves e IPs pelo seus valores reais antes de usar em produção.</p>
     </footer>
+<h1>WireGuard VPN - Guia Completo</h1>
+
+   <p>Este guia explica como configurar um <strong>servidor WireGuard</strong> no Linux (Kali/Ubuntu/Debian) e conectar um cliente de forma segura, incluindo NAT, firewall e persistência de regras.</p>
+
+   <h2>Requisitos</h2>
+    <ul>
+        <li>Linux (Debian, Ubuntu ou Kali)</li>
+        <li>Acesso root ou sudo</li>
+        <li>WireGuard instalado:
+            <pre><code>sudo apt update
+sudo apt install wireguard</code></pre>
+        </li>
+        <li>Interface de saída do servidor (ex.: <code>eth0</code>) com acesso à Internet</li>
+        <li>Porta UDP liberada (padrão: 51820)</li>
+    </ul>
+
+   <h2>1. Criar script de configuração do servidor</h2>
+    <p>Crie um arquivo chamado <code>setup-wireguard-server.sh</code> com o seguinte conteúdo:</p>
+
+   <pre><code>#!/bin/bash
+set -e
+
+WG_CONF="/etc/wireguard/wg0.conf"
+WG_INTERFACE="wg0"
+WG_PORT=51820
+
+# Gerar chave do servidor
+SERVER_PRIV_KEY=$(wg genkey)
+SERVER_PUB_KEY=$(echo "$SERVER_PRIV_KEY" | wg pubkey)
+
+# Salvar chave privada com permissão segura
+echo "$SERVER_PRIV_KEY" | sudo tee /etc/wireguard/privatekey > /dev/null
+sudo chmod 600 /etc/wireguard/privatekey
+
+# Gerar chave do cliente
+CLIENT_PRIV_KEY=$(wg genkey)
+CLIENT_PUB_KEY=$(echo "$CLIENT_PRIV_KEY" | wg pubkey)
+
+# Criar arquivo de configuração do servidor
+sudo bash -c "cat > $WG_CONF" <<EOL
+[Interface]
+Address = 10.0.0.1/24
+ListenPort = $WG_PORT
+PrivateKey = $SERVER_PRIV_KEY
+PostUp = iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+PostDown = iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+EOL
+
+sudo chmod 600 $WG_CONF
+
+# Ativar IP forwarding
+sudo sysctl -w net.ipv4.ip_forward=1
+sudo sed -i '/^net.ipv4.ip_forward=/d' /etc/sysctl.conf
+echo "net.ipv4.ip_forward=1" | sudo tee -a /etc/sysctl.conf
+
+# Configurar firewall (UDP)
+sudo iptables -A INPUT -p udp --dport $WG_PORT -j ACCEPT
+
+# Ativar interface WireGuard
+sudo wg-quick up $WG_INTERFACE
+sudo systemctl enable wg-quick@$WG_INTERFACE
+
+# Criar arquivo de cliente
+echo
+echo "### ARQUIVO DE CONFIGURAÇÃO DO CLIENTE ###"
+echo "[Interface]"
+echo "Address = 10.0.0.2/32"
+echo "PrivateKey = $CLIENT_PRIV_KEY"
+echo "DNS = 1.1.1.1"
+echo
+echo "[Peer]"
+echo "PublicKey = $SERVER_PUB_KEY"
+echo "Endpoint = SEU_IP_PUBLICO:$WG_PORT"
+echo "AllowedIPs = 0.0.0.0/0"
+echo "PersistentKeepalive = 25"</code></pre>
+
+   <div class="note">
+        <strong>Nota:</strong> Substitua <code>SEU_IP_PUBLICO</code> pelo IP público do servidor no arquivo do cliente.
+    </div>
+
+   <h2>2. Tornar o script executável e rodar</h2>
+    <pre><code>chmod +x setup-wireguard-server.sh
+sudo ./setup-wireguard-server.sh</code></pre>
+
+   <p>Isso irá:</p>
+    <ul>
+        <li>Gerar chaves para servidor e cliente</li>
+        <li>Criar <code>/etc/wireguard/wg0.conf</code></li>
+        <li>Habilitar IP forwarding</li>
+        <li>Configurar firewall e NAT</li>
+        <li>Ativar o WireGuard no systemd</li>
+    </ul>
+
+   <h2>3. Configurar o cliente</h2>
+    <ol>
+        <li>Instale WireGuard no cliente:
+            <pre><code>sudo apt update
+sudo apt install wireguard</code></pre>
+        </li>
+        <li>Salve o conteúdo gerado pelo script em um arquivo, por exemplo <code>client-wg0.conf</code>.</li>
+        <li>Inicie a VPN no cliente:
+            <pre><code>sudo wg-quick up client-wg0.conf</code></pre>
+        </li>
+        <li>Teste conectividade:
+            <pre><code>ping 10.0.0.1
+ping 1.1.1.1  # para testar internet via VPN</code></pre>
+        </li>
+    </ol>
+    <h2>4. Verificar status</h2>
+    <p>No servidor:</p>
+    <pre><code>sudo wg show</code></pre>
+    <p>No cliente:</p>
+    <pre><code>sudo wg show</code></pre>
+
+   <p>Você deverá ver RX e TX aumentando conforme o tráfego passa.</p>
+    <h2>5. Problemas comuns</h2>
+    <ul>
+        <li><strong>Ping falhando entre cliente e servidor:</strong>
+            <ul>
+                <li>Verifique NAT (<code>iptables -t nat -L</code>)</li>
+                <li>Confirme porta UDP aberta no firewall do servidor</li>
+                <li>Confirme IP correto no <code>Endpoint</code> do cliente</li>
+            </ul>
+        </li>
+        <li><strong>Todo tráfego pela VPN não funciona:</strong>
+            <ul>
+                <li>Confirme <code>AllowedIPs = 0.0.0.0/0</code> no cliente</li>
+                <li>Confirme regra MASQUERADE do iptables no servidor</li>
+            </ul>
+        </li>
+        <li><strong>Interface WireGuard não sobe:</strong>
+            <pre><code>sudo wg-quick down wg0
+sudo wg-quick up wg0</code></pre>
+        </li>
+    </ul>
