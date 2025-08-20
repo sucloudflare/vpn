@@ -546,3 +546,121 @@ ping 1.1.1.1  # para testar internet via VPN</code></pre>
 sudo wg-quick up wg0</code></pre>
         </li>
     </ul>
+
+
+
+<p>Este repositório documenta passo a passo as atividades realizadas para criar um ambiente seguro de testes de malware, isolamento de VMs e configuração de firewall, incluindo VPN e bloqueio de IPs.</p>
+</div>
+
+<div class="section">
+    <h2>🖥️ 1. Configuração do Ambiente Virtual</h2>
+    
+  <h3>VirtualBox</h3>
+    <ul>
+        <li>Criamos VMs para testes de malware.</li>
+        <li><strong>Isolamento total da VM infectada:</strong>
+            <ul>
+                <li>Rede: NAT isolada.</li>
+                <li>Pastas compartilhadas: desabilitadas.</li>
+                <li>Arrastar e soltar e área de transferência: desabilitados.</li>
+            </ul>
+        </li>
+        <li><strong>Snapshot:</strong> Criamos snapshots antes de rodar qualquer malware para permitir restauração rápida.</li>
+    </ul>
+
+  <h3>Kali Linux</h3>
+    <ul>
+        <li>VM principal configurada para segurança máxima:</li>
+        <li>Rede separada.</li>
+        <li>Firewall ativo (UFW).</li>
+    </ul>
+</div>
+
+<div class="section">
+    <h2>🛡️ 2. Firewall e Bloqueio de IPs</h2>
+    
+   <h3>UFW (Uncomplicated Firewall)</h3>
+    <pre>
+sudo apt update && sudo apt install ufw -y
+sudo ufw enable
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+    </pre>
+    <p>Bloqueio de IPs maliciosos (192.168.10.100–199):</p>
+    <pre>
+for ip in $(seq 100 199); do
+  sudo ufw deny from 192.168.10.$ip
+done
+    </pre>
+    <p>Verificação das regras:</p>
+    <pre>
+sudo ufw status numbered
+    </pre>
+    <h3>iptables (opção avançada)</h3>
+    <pre>
+for ip in $(seq 100 199); do
+  sudo iptables -A INPUT -s 192.168.10.$ip -j DROP
+  sudo iptables -A OUTPUT -d 192.168.10.$ip -j DROP
+done
+sudo apt install iptables-persistent -y
+sudo netfilter-persistent save
+    </pre>
+</div>
+
+<div class="section">
+    <h2>🌐 3. VPN WireGuard</h2>
+    <ul>
+        <li>Configuração da VPN com interface <strong>wg0-client</strong>:</li>
+        <ul>
+            <li>IP: 10.1.0.2</li>
+            <li>Conectada e ativa</li>
+        </ul>
+        <li>Porta UDP 51820 permitida pelo firewall UFW:
+        <pre>sudo ufw allow 51820/udp</pre>
+        </li>
+    </ul>
+</div>
+
+<div class="section">
+    <h2>📋 4. Dispositivos e Segurança de VM</h2>
+    <ul>
+        <li>Desativados dispositivos desnecessários: USB, áudio, portas seriais.</li>
+        <li>Garantido isolamento completo da rede e do host.</li>
+    </ul>
+</div>
+
+<div class="section">
+    <h2>💾 5. Snapshots e Reversão</h2>
+    <ul>
+        <li>Snapshots utilizados para restaurar VM infectada ao estado original após testes e evitar contaminação do host ou do Kali Linux.</li>
+        <li>Boas práticas:
+            <ul>
+                <li>Sempre criar snapshot antes de rodar malware.</li>
+                <li>Manter backups dos estados limpos.</li>
+            </ul>
+        </li>
+    </ul>
+</div>
+
+<div class="section">
+    <h2>✅ 6. Verificação de Rede</h2>
+    <ul>
+        <li>Interfaces ativas (via <code>ifconfig</code>):</li>
+        <ul>
+            <li>eth0: 192.168.10.106 (rede local)</li>
+            <li>lo: 127.0.0.1 (loopback)</li>
+            <li>wg0-client: 10.1.0.2 (VPN WireGuard)</li>
+        </ul>
+        <li>Firewall bloqueando IPs de teste e permitindo VPN.</li>
+    </ul>
+</div>
+
+<div class="section">
+    <h2>💡 Dicas de Segurança</h2>
+    <ul>
+        <li>Nunca rodar malware diretamente no host.</li>
+        <li>Sempre manter VM isolada e firewall ativo.</li>
+        <li>Usar snapshots para rápida reversão.</li>
+        <li>Monitorar tráfego de rede e interfaces.</li>
+    </ul>
+</div>
